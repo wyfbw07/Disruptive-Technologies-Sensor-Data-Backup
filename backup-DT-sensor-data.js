@@ -1,21 +1,26 @@
+// Created by Yifan Wang
+// Date: 2024-04-15
+
 /*
 Required: Node.js and npm https://nodejs.org/en/download
 Required: mySQL database https://dev.mysql.com/downloads/mysql/
 Install the required packages using the following command:
-npm install mysql2 node-fetch node-cron dotenv
+npm install mysql2 node-fetch node-cron dotenv eventsource
 */
 
 const mysql2 = require('mysql2');
 const cron = require('node-cron');
+const EventSource = require("eventsource")
 require('dotenv').config({ path: '.env.local' });
 
-/* *********** Database configuration ******** */
+/* ********** Database configuration ********** */
 // For security reasons, it is recommended to store the database credentials in a '.env.local' file
 const DB_HOST = process.env.DB_HOST;
 const DB_USER = process.env.DB_USER;
 const DB_PASS = process.env.DB_PASS;
 const DB_NAME = process.env.DB_NAME;
 
+// Service Account credentials
 const API_URL = process.env.API_URL;
 const API_KEY = process.env.API_KEY;
 const API_SECRET = process.env.API_SECRET;
@@ -31,15 +36,23 @@ console.log('DB_NAME:', DB_NAME);
 // Sample '.env.local' configuration
 DB_HOST = localhost
 DB_USER = root
-DB_PASS = abcdefg
+DB_PASS = yourpassword
 DB_NAME = DT_sensor_data
 
 API_URL     = https://api.disruptive-technologies.com/v2/
-API_KEY     = abcdefg
-API_SECRET  = abcdefg
-PROJECT_ID  = abcdefg
+API_KEY     = yourapikey
+API_SECRET  = yoursecret
+PROJECT_ID  = yourprojectid
 *************************************************
 */
+
+// Constants
+const MAX_CONNECTION_RETRIES = 5  // Max retries without any received messages
+const PING_INTERVAL         = 10  // Expected interval between pings in seconds
+const PING_JITTER           = 2   // Expected ping jitter in seconds
+
+// Construct API URL
+const DEVICES_STREAM_URL = API_URL + `projects/${PROJECT_ID}/devices:stream`
 
 // Use dynamic import for fetch due to ESM compatibility
 let fetch;
@@ -123,7 +136,10 @@ async function insertIntoDatabase(data) {
             reported_networkstatus_transmissionmode VARCHAR(255),
 
             reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255)
+            reported_batterystatus_updatetime       VARCHAR(255),
+
+            event_eventid                           VARCHAR(255),
+            event_timestamp                         VARCHAR(255)
         )`;
 
         insertQuery = `
@@ -220,7 +236,10 @@ async function insertIntoDatabase(data) {
             reported_networkstatus_transmissionmode VARCHAR(255),
 
             reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255)
+            reported_batterystatus_updatetime       VARCHAR(255),
+
+            event_eventid                           VARCHAR(255),
+            event_timestamp                         VARCHAR(255)
         )`;
 
         insertQuery = `
@@ -321,7 +340,10 @@ async function insertIntoDatabase(data) {
             reported_networkstatus_transmissionmode VARCHAR(255),
 
             reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255)
+            reported_batterystatus_updatetime       VARCHAR(255),
+
+            event_eventid                           VARCHAR(255),
+            event_timestamp                         VARCHAR(255)
         )`;
 
         insertQuery = `
@@ -409,7 +431,10 @@ async function insertIntoDatabase(data) {
             reported_networkstatus_transmissionmode VARCHAR(255),
 
             reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255)
+            reported_batterystatus_updatetime       VARCHAR(255),
+
+            event_eventid                           VARCHAR(255),
+            event_timestamp                         VARCHAR(255)
         )`;
 
         insertQuery = `
@@ -509,15 +534,106 @@ async function fetchSensorData() {
   }
 }
 
+async function streamEvents() {
+  let retryCount = 0
+  let stream
+  setupStream()
+
+  // Sets up a timer that will restart the stream if there has passed too 
+  // much time between ping events. This timer is reset every time we 
+  // receive a ping.
+  const pingTimer = setTimeout(() => {
+      console.log("Too long between pings. Reconnecting...")
+      clearTimeout(pingTimer)
+      setTimeout(() => { // Wait a second before reconnecting
+          setupStream()
+      }, 1000)
+  }, (PING_INTERVAL + PING_JITTER) * 1000)
+
+  async function setupStream() {
+      // If we've retried too many times without getting any messages, exit
+      if (retryCount >= MAX_CONNECTION_RETRIES) {
+          console.log("Retried too many times. Exiting")
+          process.exit(1)
+      }
+      retryCount += 1
+      
+      // Close the existing stream if we have one
+      if (stream) {
+          stream.close()
+      }
+
+      console.log('Streaming... Press CTRL+C to exit.')
+
+      // Add query parameters to the URL
+      let url = DEVICES_STREAM_URL
+      url += `?ping_interval=${PING_INTERVAL}s` // Specifies ping interval
+
+      // Prepare the "Authorization" header with basic auth.
+      // NOTE: This should be implemented using OAuth2 in a production environment.
+      const basicAuthStr = `${API_KEY}:${API_SECRET}`
+      const headers = {
+          Authorization: "Basic " + Buffer.from(basicAuthStr).toString("base64")
+      }
+      
+      // Set up a new stream with callback functions for messages and errors
+      // Using headers only works external "eventsource" package. In a browser
+      // environment, either use polyfill or the "token" query parameter with
+      // an access token from OAuth2.
+      stream = new EventSource(url, { headers })
+      stream.onmessage = handleStreamMessage
+      stream.onerror = handleStreamError
+  }
+  
+  function handleStreamError(err) {
+      console.error("Got error from stream:")
+      console.error(err)
+      console.log("Reconnecting...")
+      
+      clearTimeout(pingTimer)
+      setTimeout(() => { // Wait a second before reconnecting
+          setupStream()
+      }, 1000)
+  }
+  
+  function handleStreamMessage(message) {
+      // Parse the payload as JSON
+      const data = JSON.parse(message.data)
+
+      // Check if we got an error
+      if (data?.error) {
+          handleStreamError(data.error)
+          return
+      }
+
+      // Reset the retry counter now that we've got an event
+      retryCount = 0
+
+      // Parse the event object
+      const event = data.result.event
+      if (event.eventType === "ping") {
+          // We got a ping event. Reset the ping timer
+          pingTimer.refresh()
+      } else {
+          // We got an event
+          console.log(`Got ${event.eventType} event.`)
+      }
+  }
+}
+
 function main() {
-  // fetchSensorData();
-  // // Run the fetchSensorData function every 3 minutes
-  // cron.schedule('*/3 * * * *', () => {
+  
+  // Backup every 3 minutes
+  fetchSensorData();
+  cron.schedule('*/3 * * * *', () => {
+    fetchSensorData();
+  });
+
+  // // DEBUG: Run the fetchSensorData function every 10 seconds
+  // cron.schedule('*/10 * * * * *', () => {
   //   fetchSensorData();
   // });
 
-  // DEBUG: Run the fetchSensorData function every 10 seconds
-  cron.schedule('*/10 * * * * *', () => {
-    fetchSensorData();
-  });
+  // // EXPERIMENTAL: Stream events from the API
+  // streamEvents();
 }
