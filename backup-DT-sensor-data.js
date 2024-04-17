@@ -11,15 +11,15 @@ require('dotenv').config({ path: '.env.local' });
 
 /* *********** Database configuration ******** */
 // For security reasons, it is recommended to store the database credentials in a '.env.local' file
-const DB_HOST     = process.env.DB_HOST;
-const DB_USER     = process.env.DB_USER;
-const DB_PASS     = process.env.DB_PASS;
-const DB_NAME     = process.env.DB_NAME;
+const DB_HOST = process.env.DB_HOST;
+const DB_USER = process.env.DB_USER;
+const DB_PASS = process.env.DB_PASS;
+const DB_NAME = process.env.DB_NAME;
 
-const API_URL     = process.env.API_URL;
-const API_KEY     = process.env.API_KEY;
-const API_SECRET  = process.env.API_SECRET;
-const PROJECT_ID  = process.env.PROJECT_ID;
+const API_URL = process.env.API_URL;
+const API_KEY = process.env.API_KEY;
+const API_SECRET = process.env.API_SECRET;
+const PROJECT_ID = process.env.PROJECT_ID;
 
 console.log('DB_HOST:', DB_HOST);
 console.log('DB_USER:', DB_USER);
@@ -48,6 +48,7 @@ import('node-fetch').then(({ default: nodeFetch }) => {
   main();
 });
 
+// Function to ensure the database exists and establish a connection
 async function ensureDatabaseExists() {
   const testConnection = await mysql2.createConnection({
     host: DB_HOST,
@@ -68,7 +69,7 @@ async function ensureDatabaseExists() {
 
   // Close the test connection
   await testConnection.end();
-  // Return a new connection to the specific database
+  // Return a new connection to the database
   return mysql2.createConnection({
     host: DB_HOST,
     user: DB_USER,
@@ -81,75 +82,390 @@ async function ensureDatabaseExists() {
 async function insertIntoDatabase(data) {
   console.log('*--------------------*');
   console.log('Fetching sensor data...');
+
+  // Connect to the database
   const connection = await ensureDatabaseExists();
   await connection.connect();
 
   for (const device of data.devices) {
     // Use device ID as table names
-    const deviceId = device.name.split('/').pop();
-    const tableName = `\`${deviceId}\``;
-
-    // Create table and insert data based on device type
     let values = [];
     insertQuery = '';
     createTableQuery = '';
+    const deviceId = device.name.split('/').pop();
+    const tableName = `\`${deviceId}\``;
 
+    // Create the table and insert query based on the device type
     switch (device.type) {
       case 'humidity':
         createTableQuery = `
           CREATE TABLE IF NOT EXISTS ${tableName} (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          capture_timestamp VARCHAR(255) NOT NULL,
-          recorded_timestamp VARCHAR(255) NOT NULL,
-          name VARCHAR(255),
-          type VARCHAR(255) NOT NULL,
-          kit VARCHAR(255) NOT NULL,
-          temperature FLOAT,
-          relativeHumidity FLOAT
+            id                                      INT AUTO_INCREMENT PRIMARY KEY,
+            recorded_timestamp                      VARCHAR(255) NOT NULL,
+
+            project_id                              VARCHAR(255) NOT NULL,
+            device_id                               VARCHAR(255) NOT NULL,
+            type                                    VARCHAR(255) NOT NULL,
+            product_number                          VARCHAR(255) NOT NULL,
+
+            labels_kit                              VARCHAR(255),
+            labels_name                             VARCHAR(255),
+
+            reported_humidity_temperature           FLOAT,
+            reported_humidity_relativehumidity      FLOAT,
+            reported_humidity_updatetime            VARCHAR(255),
+
+            reported_touch_updatetime               VARCHAR(255),
+
+            reported_networkstatus_signalstrength   INT,
+            reported_networkstatus_rssi             INT,
+            reported_networkstatus_updatetime       VARCHAR(255),
+            reported_networkstatus_transmissionmode VARCHAR(255),
+
+            reported_batterystatus_percentage       INT,
+            reported_batterystatus_updatetime       VARCHAR(255)
         )`;
 
         insertQuery = `
            INSERT INTO ${tableName} (
-           capture_timestamp, recorded_timestamp, name, type, kit, temperature, relativeHumidity) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+            recorded_timestamp,
+
+            project_id,
+            device_id,
+            type,
+            product_number,
+
+            labels_kit,
+            labels_name,
+
+            reported_humidity_temperature,
+            reported_humidity_relativehumidity,
+            reported_humidity_updatetime,
+
+            reported_touch_updatetime,
+
+            reported_networkstatus_signalstrength,
+            reported_networkstatus_rssi,
+            reported_networkstatus_updatetime,
+            reported_networkstatus_transmissionmode,
+
+            reported_batterystatus_percentage,
+            reported_batterystatus_updatetime
+          ) 
+           VALUES (
+            ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?,
+            ?, ?, ?, ?,
+            ?, ?
+            )
           `;
 
         values = [
-          device.reported.humidity.updateTime,
           new Date().toISOString(),
-          device.name,
+
+          device.name.split('/')[1],
+          device.name.split('/').pop(),
           device.type,
+          device.productNumber,
+
           device.labels.kit,
+          device.labels.name || null,
+
           device.reported.humidity.temperature,
-          device.reported.humidity.relativeHumidity
+          device.reported.humidity.relativeHumidity,
+          device.reported.humidity.updateTime,
+
+          device.reported.touch.updateTime,
+
+          device.reported.networkStatus.signalStrength,
+          device.reported.networkStatus.rssi,
+          device.reported.networkStatus.updateTime,
+          device.reported.networkStatus.transmissionMode,
+
+          device.reported.batteryStatus.percentage,
+          device.reported.batteryStatus.updateTime
         ];
         break;
 
       case 'co2':
         createTableQuery = `
           CREATE TABLE IF NOT EXISTS ${tableName} (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          capture_timestamp VARCHAR(255) NOT NULL,
-          recorded_timestamp VARCHAR(255) NOT NULL,
-          name VARCHAR(255),
-          type VARCHAR(255) NOT NULL,
-          kit VARCHAR(255) NOT NULL,
-          ppm FLOAT
+            id                                      INT AUTO_INCREMENT PRIMARY KEY,
+            recorded_timestamp                      VARCHAR(255) NOT NULL,
+
+            project_id                              VARCHAR(255) NOT NULL,
+            device_id                               VARCHAR(255) NOT NULL,
+            type                                    VARCHAR(255) NOT NULL,
+            product_number                          VARCHAR(255) NOT NULL,
+
+            labels_kit                              VARCHAR(255),
+            labels_name                             VARCHAR(255),
+
+            reported_co2_ppm                        INT,
+            reported_co2_updatetime                 VARCHAR(255),
+
+            reported_pressure_pascal                INT,
+            reported_pressure_updatetime            VARCHAR(255),
+
+            reported_humidity_temperature           FLOAT,
+            reported_humidity_relativehumidity      FLOAT,
+            reported_humidity_updatetime            VARCHAR(255),
+
+            reported_networkstatus_signalstrength   INT,
+            reported_networkstatus_rssi             INT,
+            reported_networkstatus_updatetime       VARCHAR(255),
+            reported_networkstatus_transmissionmode VARCHAR(255),
+
+            reported_batterystatus_percentage       INT,
+            reported_batterystatus_updatetime       VARCHAR(255)
         )`;
 
         insertQuery = `
            INSERT INTO ${tableName} (
-           capture_timestamp, recorded_timestamp, name, type, kit, ppm) 
-           VALUES (?, ?, ?, ?, ?, ?)
+            recorded_timestamp,
+
+            project_id,
+            device_id,
+            type,
+            product_number,
+
+            labels_kit,
+            labels_name,
+
+            reported_co2_ppm,
+            reported_co2_updatetime,
+
+            reported_pressure_pascal,
+            reported_pressure_updatetime,
+
+            reported_humidity_temperature,
+            reported_humidity_relativehumidity,
+            reported_humidity_updatetime,
+
+            reported_networkstatus_signalstrength,
+            reported_networkstatus_rssi,
+            reported_networkstatus_updatetime,
+            reported_networkstatus_transmissionmode,
+
+            reported_batterystatus_percentage,
+            reported_batterystatus_updatetime
+          ) 
+           VALUES (
+            ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?
+            )
           `;
 
         values = [
-          device.reported.humidity.updateTime,
           new Date().toISOString(),
-          device.name,
+
+          device.name.split('/')[1],
+          device.name.split('/').pop(),
           device.type,
+          device.productNumber,
+
           device.labels.kit,
-          device.reported.co2.ppm
+          device.labels.name || null,
+
+          device.reported.co2.ppm,
+          device.reported.co2.updateTime,
+
+          device.reported.pressure.pascal,
+          device.reported.pressure.updateTime,
+
+          device.reported.humidity.temperature,
+          device.reported.humidity.relativeHumidity,
+          device.reported.humidity.updateTime,
+
+          device.reported.networkStatus.signalStrength,
+          device.reported.networkStatus.rssi,
+          device.reported.networkStatus.updateTime,
+          device.reported.networkStatus.transmissionMode,
+
+          device.reported.batteryStatus.percentage,
+          device.reported.batteryStatus.updateTime
+        ];
+        break;
+
+      case 'proximity':
+        createTableQuery = `
+          CREATE TABLE IF NOT EXISTS ${tableName} (
+            id                                      INT AUTO_INCREMENT PRIMARY KEY,
+            recorded_timestamp                      VARCHAR(255) NOT NULL,
+
+            project_id                              VARCHAR(255) NOT NULL,
+            device_id                               VARCHAR(255) NOT NULL,
+            type                                    VARCHAR(255) NOT NULL,
+            product_number                          VARCHAR(255) NOT NULL,
+
+            labels_kit                              VARCHAR(255),
+            labels_name                             VARCHAR(255),
+
+            reported_objectpresent_state            VARCHAR(255),
+            reported_objectpresent_updatetime       VARCHAR(255),
+
+            reported_touch_updatetime               VARCHAR(255),
+
+            reported_networkstatus_signalstrength   INT,
+            reported_networkstatus_rssi             INT,
+            reported_networkstatus_updatetime       VARCHAR(255),
+            reported_networkstatus_transmissionmode VARCHAR(255),
+
+            reported_batterystatus_percentage       INT,
+            reported_batterystatus_updatetime       VARCHAR(255)
+        )`;
+
+        insertQuery = `
+           INSERT INTO ${tableName} (
+            recorded_timestamp,
+
+            project_id,
+            device_id,
+            type,
+            product_number,
+
+            labels_kit,
+            labels_name,
+
+            reported_objectpresent_state,
+            reported_objectpresent_updatetime,
+
+            reported_touch_updateTime,
+
+            reported_networkstatus_signalstrength,
+            reported_networkstatus_rssi,
+            reported_networkstatus_updatetime,
+            reported_networkstatus_transmissionmode,
+
+            reported_batterystatus_percentage,
+            reported_batterystatus_updatetime
+          ) 
+           VALUES (
+            ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?,
+            ?, ?, ?, ?,
+            ?, ?
+            )
+          `;
+
+        values = [
+          new Date().toISOString(),
+
+          device.name.split('/')[1],
+          device.name.split('/').pop(),
+          device.type,
+          device.productNumber,
+
+          device.labels.kit,
+          device.labels.name || null,
+
+          device.reported.objectPresent.state,
+          device.reported.objectPresent.updateTime,
+
+          device.reported.touch.updateTime,
+
+          device.reported.networkStatus.signalStrength,
+          device.reported.networkStatus.rssi,
+          device.reported.networkStatus.updateTime,
+          device.reported.networkStatus.transmissionMode,
+
+          device.reported.batteryStatus.percentage,
+          device.reported.batteryStatus.updateTime
+        ];
+        break;
+
+      case 'motion':
+        createTableQuery = `
+          CREATE TABLE IF NOT EXISTS ${tableName} (
+            id                                      INT AUTO_INCREMENT PRIMARY KEY,
+            recorded_timestamp                      VARCHAR(255) NOT NULL,
+
+            project_id                              VARCHAR(255) NOT NULL,
+            device_id                               VARCHAR(255) NOT NULL,
+            type                                    VARCHAR(255) NOT NULL,
+            product_number                          VARCHAR(255) NOT NULL,
+
+            labels_kit                              VARCHAR(255),
+            labels_name                             VARCHAR(255),
+
+            reported_motion_state                   VARCHAR(255),
+            reported_motion_updatetime              VARCHAR(255),
+
+            reported_networkstatus_signalstrength   INT,
+            reported_networkstatus_rssi             INT,
+            reported_networkstatus_updatetime       VARCHAR(255),
+            reported_networkstatus_transmissionmode VARCHAR(255),
+
+            reported_batterystatus_percentage       INT,
+            reported_batterystatus_updatetime       VARCHAR(255)
+        )`;
+
+        insertQuery = `
+           INSERT INTO ${tableName} (
+            recorded_timestamp,
+
+            project_id,
+            device_id,
+            type,
+            product_number,
+
+            labels_kit,
+            labels_name,
+
+            reported_motion_state,
+            reported_motion_updatetime,
+
+            reported_networkstatus_signalstrength,
+            reported_networkstatus_rssi,
+            reported_networkstatus_updatetime,
+            reported_networkstatus_transmissionmode,
+
+            reported_batterystatus_percentage,
+            reported_batterystatus_updatetime
+          ) 
+           VALUES (
+            ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?, ?,
+            ?, ?
+            )
+          `;
+
+        values = [
+          new Date().toISOString(),
+
+          device.name.split('/')[1],
+          device.name.split('/').pop(),
+          device.type,
+          device.productNumber,
+
+          device.labels.kit,
+          device.labels.name || null,
+
+          device.reported.motion.state,
+          device.reported.motion.updateTime,
+
+          device.reported.networkStatus.signalStrength,
+          device.reported.networkStatus.rssi,
+          device.reported.networkStatus.updateTime,
+          device.reported.networkStatus.transmissionMode,
+
+          device.reported.batteryStatus.percentage,
+          device.reported.batteryStatus.updateTime
         ];
         break;
     }
@@ -194,14 +510,14 @@ async function fetchSensorData() {
 }
 
 function main() {
-  fetchSensorData();
-  // Run the fetchSensorData function every 3 minutes
-  cron.schedule('*/3 * * * *', () => {
-    fetchSensorData();
-  });
-
-  // // DEBUG: Run the fetchSensorData function every 10 seconds
-  // cron.schedule('*/10 * * * * *', () => {
+  // fetchSensorData();
+  // // Run the fetchSensorData function every 3 minutes
+  // cron.schedule('*/3 * * * *', () => {
   //   fetchSensorData();
   // });
+
+  // DEBUG: Run the fetchSensorData function every 10 seconds
+  cron.schedule('*/10 * * * * *', () => {
+    fetchSensorData();
+  });
 }
