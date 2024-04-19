@@ -106,12 +106,11 @@ async function insertIntoDatabase(data) {
     insertQuery = '';
     createTableQuery = '';
     const deviceId = device.name.split('/').pop();
-    var tableName = `\`${deviceId}\``;
+    const tableName = `\`${deviceId}\``;
 
     // Create the table and insert query based on the device type
     switch (device.type) {
       case 'humidity':
-        // tableName = "Humidity_"+tableName;
         createTableQuery = `
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id                                      INT AUTO_INCREMENT PRIMARY KEY,
@@ -494,175 +493,7 @@ async function insertIntoDatabase(data) {
           device.reported.batteryStatus.updateTime
         ];
         break;
-
-      case 'temperature':
-        createTableQuery = `
-          CREATE TABLE IF NOT EXISTS ${tableName} (
-            id                                      INT AUTO_INCREMENT PRIMARY KEY,
-            recorded_timestamp                      VARCHAR(255) NOT NULL,
-
-            project_id                              VARCHAR(255) NOT NULL,
-            device_id                               VARCHAR(255) NOT NULL,
-            type                                    VARCHAR(255) NOT NULL,
-            product_number                          VARCHAR(255) NOT NULL,
-
-            labels_kit                              VARCHAR(255),
-            labels_name                             VARCHAR(255),
-
-            reported_temperature_temperature        FLOAT,
-            reported_temperature_updatetime         VARCHAR(255),
-
-            reported_touch_updatetime               VARCHAR(255),
-
-            reported_networkstatus_signalstrength   INT,
-            reported_networkstatus_rssi             INT,
-            reported_networkstatus_updatetime       VARCHAR(255),
-            reported_networkstatus_transmissionmode VARCHAR(255),
-
-            reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255),
-
-            event_eventid                           VARCHAR(255),
-            event_timestamp                         VARCHAR(255)
-        )`;
-
-        insertQuery = `
-           INSERT INTO ${tableName} (
-            recorded_timestamp,
-
-            project_id,
-            device_id,
-            type,
-            product_number,
-
-            labels_kit,
-            labels_name,
-
-            reported_temperature_temperature,
-            reported_temperature_updatetime,
-
-            reported_touch_updatetime,
-
-            reported_networkstatus_signalstrength,
-            reported_networkstatus_rssi,
-            reported_networkstatus_updatetime,
-            reported_networkstatus_transmissionmode
-           )
-            VALUES (
-              ?, 
-              ?, ?, ?, ?,
-              ?, ?,
-              ?, ?,
-              ?,
-              ?, ?, ?, ?
-            )
-          `;
-        values = [
-          new Date().toISOString(),
-
-          device.name.split('/')[1],
-          device.name.split('/').pop(),
-          device.type,
-          device.productNumber,
-
-          device.labels.kit,
-          device.labels.name || null,
-
-          device.reported.temperature.temperature,
-          device.reported.temperature.updateTime,
-
-          device.reported.touch.updateTime,
-
-          device.reported.networkStatus.signalStrength,
-          device.reported.networkStatus.rssi,
-          device.reported.networkStatus.updateTime,
-          device.reported.networkStatus.transmissionMode
-        ];
-        break;
-
-      case 'cloud_connector':
-        createTableQuery = `
-          CREATE TABLE IF NOT EXISTS ${tableName} (
-            id                                      INT AUTO_INCREMENT PRIMARY KEY,
-            recorded_timestamp                      VARCHAR(255) NOT NULL,
-
-            project_id                              VARCHAR(255) NOT NULL,
-            device_id                               VARCHAR(255) NOT NULL,
-            type                                    VARCHAR(255) NOT NULL,
-            product_number                          VARCHAR(255) NOT NULL,
-
-            labels_kit                              VARCHAR(255),
-            labels_name                             VARCHAR(255),
-
-            reported_cloudconnector_updatetime      VARCHAR(255),
-
-            reported_networkstatus_signalstrength   INT,
-            reported_networkstatus_rssi             INT,
-            reported_networkstatus_updatetime       VARCHAR(255),
-            reported_networkstatus_transmissionmode VARCHAR(255),
-
-            reported_batterystatus_percentage       INT,
-            reported_batterystatus_updatetime       VARCHAR(255),
-
-            event_eventid                           VARCHAR(255),
-            event_timestamp                         VARCHAR(255)
-        )`;
-      
-        insertQuery = `
-            INSERT INTO ${tableName} (
-              recorded_timestamp,
-
-              project_id,
-              device_id,
-              type,
-              product_number,
-
-              labels_kit,
-              labels_name,
-
-              reported_cloudconnector_updatetime,
-
-              reported_networkstatus_signalstrength,
-              reported_networkstatus_rssi,
-              reported_networkstatus_updatetime,
-              reported_networkstatus_transmissionmode,
-
-              reported_batterystatus_percentage,
-              reported_batterystatus_updatetime
-            )
-            VALUES (
-              ?,
-              ?, ?, ?, ?,
-              ?, ?,
-              ?,
-              ?, ?, ?, ?,
-              ?, ?
-            )
-          `;
-        values = [
-          new Date().toISOString(),
-
-          device.name.split('/')[1],
-          device.name.split('/').pop(),
-          device.type,
-          device.productNumber,
-
-          device.labels.kit,
-          device.labels.name || null,
-
-          device.reported.cloudConnector.updateTime,
-
-          device.reported.networkStatus.signalStrength,
-          device.reported.networkStatus.rssi,
-          device.reported.networkStatus.updateTime,
-          device.reported.networkStatus.transmissionMode,
-
-          device.reported.batteryStatus.percentage,
-          device.reported.batteryStatus.updateTime
-        ];
-        break;
     }
-
 
     // Execute the queries
     if (createTableQuery != '') {
